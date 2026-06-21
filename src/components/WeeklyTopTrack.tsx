@@ -25,12 +25,6 @@ export default function WeeklyTopTrack({
 }: Props) {
   return (
     <div className="flex-shrink-0">
-      <h2
-        className="text-[11px] font-bold text-black/30 uppercase tracking-widest mb-3"
-        style={{ fontFamily: 'Raleway, sans-serif' }}
-      >
-        Weekly Top Track
-      </h2>
       <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
         {tracks.map((track) => {
           const isActive = currentTrack?.id === track.id

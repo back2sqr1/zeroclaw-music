@@ -84,6 +84,68 @@ app.get('/api/tracks', async (req, res) => {
   res.json((data || []).map(toPublicTrack))
 })
 
+app.post('/api/tracks/upload', express.raw({ type: () => true, limit: '100mb' }), async (req, res) => {
+  const title = String(req.query.title || '').trim() || 'Untitled'
+  const artist = String(req.query.artist || '').trim() || 'Unknown'
+  const rawFilename = decodeHeaderFilename(req.headers['x-audio-filename'])
+  const mimeType = normalizeStabilityInputMimeType(req.headers['content-type'], rawFilename)
+
+  if (!mimeType) {
+    res.status(400).json({ error: 'Only MP3 and WAV uploads are supported.' })
+    return
+  }
+
+  const audioBuffer = req.body
+  if (!Buffer.isBuffer(audioBuffer) || audioBuffer.length === 0) {
+    res.status(400).json({ error: 'No audio data received.' })
+    return
+  }
+
+  const outputFormat = mimeType === 'audio/wav' ? 'wav' : 'mp3'
+  const id = `upload-${Date.now()}`
+  const filename = `${id}.${outputFormat}`
+
+  const { error: uploadError } = await supabase.storage
+    .from('audio')
+    .upload(filename, audioBuffer, { contentType: mimeType, upsert: false })
+  if (uploadError) {
+    res.status(500).json({ error: `Storage upload failed: ${uploadError.message}` })
+    return
+  }
+
+  const [promptVec, audioVec] = await Promise.all([
+    embedPrompt(`${title} by ${artist}`).catch(() => null),
+    embedAudio(audioBuffer).catch(() => null),
+  ])
+
+  const { error: insertError } = await supabase.from('tracks').insert({
+    id,
+    title,
+    artist,
+    filename,
+    bucket: 'audio',
+    mime_type: mimeType,
+    source: 'local',
+    ...(promptVec ? { prompt_embedding: promptVec } : {}),
+    ...(audioVec ? { audio_embedding: audioVec } : {}),
+  })
+
+  if (insertError) {
+    await supabase.storage.from('audio').remove([filename])
+    res.status(500).json({ error: `DB insert failed: ${insertError.message}` })
+    return
+  }
+
+  res.status(201).json({
+    id,
+    title,
+    artist,
+    source: 'local',
+    genre: '#local',
+    url: publicUrl('audio', filename),
+  })
+})
+
 app.delete('/api/tracks/:id', async (req, res) => {
   const { data: track, error: fetchError } = await supabase
     .from('tracks')
@@ -108,14 +170,20 @@ app.delete('/api/tracks/:id', async (req, res) => {
 
 // --- Audio generation helpers ---
 
-const AUDIO_API_URL =
-  process.env.AUDIO_API_URL ||
-  'https://reverb-paste--stable-audio-3-server-stableaudio3-text-to-audio.modal.run/'
-const MODAL_AUDIO_TO_AUDIO_API_URL =
-  process.env.MODAL_AUDIO_TO_AUDIO_API_URL ||
-  'https://reverb-paste--stable-audio-3-server-stableaudio3-audio-to-audio.modal.run/'
-const AUDIO_TO_AUDIO_INIT_NOISE_LEVEL =
-  Number(process.env.AUDIO_TO_AUDIO_INIT_NOISE_LEVEL) || 0.9
+const STABLE_AUDIO_BASE_URL = (process.env.STABLE_AUDIO_BASE_URL || '').replace(/\/$/, '')
+
+const MODAL_TEXT_TO_AUDIO_URL = STABLE_AUDIO_BASE_URL
+  ? `${STABLE_AUDIO_BASE_URL}/text-to-audio`
+  : process.env.AUDIO_API_URL ||
+    'https://reverb-paste--stable-audio-3-server-stableaudio3-text-to-audio.modal.run/'
+
+const MODAL_AUDIO_TO_AUDIO_URL = STABLE_AUDIO_BASE_URL
+  ? `${STABLE_AUDIO_BASE_URL}/audio-to-audio`
+  : process.env.MODAL_AUDIO_TO_AUDIO_API_URL ||
+    'https://reverb-paste--stable-audio-3-server-stableaudio3-audio-to-audio.modal.run/'
+
+const AUDIO_TO_AUDIO_STRENGTH =
+  Number(process.env.AUDIO_TO_AUDIO_STRENGTH ?? process.env.AUDIO_TO_AUDIO_INIT_NOISE_LEVEL) || 0.9
 
 const STABILITY_AUDIO_TO_AUDIO_URL =
   process.env.STABILITY_AUDIO_TO_AUDIO_URL ||
@@ -273,25 +341,48 @@ async function requestStabilityAudioToAudio({ prompt, duration, strength, output
   throw new Error('Stability audio-to-audio timed out while processing')
 }
 
-async function requestJsonAudioToAudio({ prompt, duration, initNoiseLevel, audio }) {
-  const preparedAudio = await prepareAudioUploadInput(audio, duration)
-  const audioRes = await fetch(MODAL_AUDIO_TO_AUDIO_API_URL, {
+async function requestModalTextToAudio({ prompt, duration, outputFormat, seed, steps, cfgScale }) {
+  const fd = new FormData()
+  fd.append('prompt', prompt)
+  fd.append('duration', String(duration))
+  fd.append('output_format', outputFormat)
+  if (seed != null) fd.append('seed', String(seed))
+  if (steps != null) fd.append('steps', String(steps))
+  if (cfgScale != null) fd.append('cfg_scale', String(cfgScale))
+
+  const res = await fetch(MODAL_TEXT_TO_AUDIO_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'audio/*' },
-    body: JSON.stringify({
-      audio_base64: preparedAudio.buffer.toString('base64'),
-      prompt,
-      duration,
-      init_noise_level: initNoiseLevel,
-    }),
-    signal: AbortSignal.timeout(120_000),
+    body: fd,
+    signal: AbortSignal.timeout(600_000),
   })
 
-  if (!audioRes.ok) {
-    const detail = await responseErrorDetail(audioRes)
-    throw new Error(`Audio API error ${audioRes.status}${detail ? `: ${detail}` : ''}`)
+  if (!res.ok) {
+    const detail = await responseErrorDetail(res)
+    throw new Error(`Audio API error ${res.status}${detail ? `: ${detail}` : ''}`)
   }
-  return Buffer.from(await audioRes.arrayBuffer())
+  return Buffer.from(await res.arrayBuffer())
+}
+
+async function requestModalAudioToAudio({ prompt, duration, strength, outputFormat, audio }) {
+  const preparedAudio = await prepareAudioUploadInput(audio, duration)
+
+  const fd = new FormData()
+  fd.append('audio', preparedAudio.buffer.toString('base64'))
+  fd.append('prompt', prompt)
+  fd.append('duration', String(duration))
+  fd.append('init_noise_level', String(strength))
+
+  const res = await fetch(MODAL_AUDIO_TO_AUDIO_URL, {
+    method: 'POST',
+    body: fd,
+    signal: AbortSignal.timeout(600_000),
+  })
+
+  if (!res.ok) {
+    const detail = await responseErrorDetail(res)
+    throw new Error(`Audio API error ${res.status}${detail ? `: ${detail}` : ''}`)
+  }
+  return Buffer.from(await res.arrayBuffer())
 }
 
 // Save a generated audio buffer to Supabase Storage + DB, embed it, return track object
@@ -330,7 +421,7 @@ async function saveGeneratedTrack({ audioBuffer, title, mimeType, outputFormat }
     artist: 'Generated',
     source: 'generated',
     genre: '#generated',
-    url: publicUrl('generated', filename),
+    url: publicUrl('audio', filename),
     mimeType,
     createdAt: Date.now(),
   }
@@ -401,9 +492,12 @@ app.post('/api/generate', parseGenerateRequest, async (req, res) => {
   if (hasAudioUpload) {
     const audioBuffer = rawAudio || Buffer.from(audioData, 'base64')
     const stablePrompt = prompt || 'Enhance this audio into a polished music track.'
-    const initNoiseLevel = Math.min(
+    const outputFormat = normalizeOutputFormat(
+      req.body?.outputFormat || req.body?.output_format || req.query.outputFormat || req.query.output_format,
+    )
+    const strength = Math.min(
       Math.max(
-        Number(req.body?.initNoiseLevel || req.body?.init_noise_level || req.query.initNoiseLevel || req.query.init_noise_level) || AUDIO_TO_AUDIO_INIT_NOISE_LEVEL,
+        Number(req.body?.strength || req.body?.initNoiseLevel || req.body?.init_noise_level || req.query.strength || req.query.initNoiseLevel || req.query.init_noise_level) || AUDIO_TO_AUDIO_STRENGTH,
         0,
       ),
       1,
@@ -418,17 +512,18 @@ app.post('/api/generate', parseGenerateRequest, async (req, res) => {
       headerValue(req.headers['content-type'])
 
     try {
-      const generatedAudio = await requestJsonAudioToAudio({
+      const generatedAudio = await requestModalAudioToAudio({
         prompt: stablePrompt,
         duration,
-        initNoiseLevel,
+        strength,
+        outputFormat,
         audio: { buffer: audioBuffer, filename: audioFilename, mimeType: audioMimeType },
       })
       const track = await saveGeneratedTrack({
         audioBuffer: generatedAudio,
         title: stablePrompt.slice(0, 80),
-        mimeType: 'audio/wav',
-        outputFormat: 'wav',
+        mimeType: outputFormat === 'wav' ? 'audio/wav' : 'audio/mpeg',
+        outputFormat,
       })
       res.status(201).json(track)
     } catch (error) {
@@ -443,36 +538,25 @@ app.post('/api/generate', parseGenerateRequest, async (req, res) => {
     return
   }
 
-  let audioRes
-  try {
-    audioRes = await fetch(AUDIO_API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt, duration }),
-      signal: AbortSignal.timeout(120_000),
-    })
-  } catch {
-    res.status(502).json({ error: 'Failed to reach audio API' })
-    return
-  }
-
-  if (!audioRes.ok) {
-    const detail = await audioRes.text().catch(() => '')
-    res.status(502).json({ error: `Audio API error ${audioRes.status}`, detail })
-    return
-  }
+  const outputFormat = normalizeOutputFormat(
+    req.body?.outputFormat || req.body?.output_format || req.query.outputFormat || req.query.output_format,
+  )
+  const seed = req.body?.seed != null ? Number(req.body.seed) : req.query.seed != null ? Number(req.query.seed) : undefined
+  const steps = req.body?.steps != null ? Number(req.body.steps) : req.query.steps != null ? Number(req.query.steps) : undefined
+  const cfgScale = req.body?.cfgScale != null ? Number(req.body.cfgScale) : req.body?.cfg_scale != null ? Number(req.body.cfg_scale) : undefined
 
   try {
-    const audioBuffer = Buffer.from(await audioRes.arrayBuffer())
+    const audioBuffer = await requestModalTextToAudio({ prompt, duration, outputFormat, seed, steps, cfgScale })
     const track = await saveGeneratedTrack({
       audioBuffer,
       title: prompt.slice(0, 80),
-      mimeType: 'audio/wav',
-      outputFormat: 'wav',
+      mimeType: outputFormat === 'wav' ? 'audio/wav' : 'audio/mpeg',
+      outputFormat,
     })
     res.status(201).json(track)
   } catch (error) {
-    res.status(502).json({ error: error instanceof Error ? error.message : 'Failed to save track' })
+    console.error(error)
+    res.status(502).json({ error: error instanceof Error ? error.message : 'Failed to generate audio' })
   }
 })
 

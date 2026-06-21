@@ -6,6 +6,7 @@ import WeeklyTopTrack from './components/WeeklyTopTrack'
 import FavoritesSidebar from './components/FavoritesSidebar'
 import PlayerBar from './components/PlayerBar'
 import GeneratePanel from './components/GeneratePanel'
+import UploadTrackForm from './components/UploadTrackForm'
 import './index.css'
 
 interface ApiTrack {
@@ -130,6 +131,15 @@ export default function App() {
 
               {/* Scrollable catalog sections */}
               <div className="flex flex-col gap-6 p-5 flex-1">
+                <div className="flex items-center justify-between">
+                  <span
+                    className="text-[11px] font-bold text-black/30 uppercase tracking-widest"
+                    style={{ fontFamily: 'Raleway, sans-serif' }}
+                  >
+                    Library
+                  </span>
+                  <UploadTrackForm onUploaded={() => setCatalogRevision((r) => r + 1)} />
+                </div>
                 <WeeklyTopTrack
                   tracks={tracks}
                   searchQuery={searchQuery}

@@ -18,7 +18,17 @@ export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
   audioFile?: string
+  generatedTrackId?: string
   timestamp: number
+}
+
+export interface GeneratedTrackMeta {
+  id: string
+  title: string
+  artist: string
+  filename: string
+  mimeType: string
+  createdAt: number
 }
 
 export type ActiveView = 'catalog' | 'generate'

@@ -29,6 +29,7 @@ export default function App() {
   const [trackError, setTrackError] = useState('')
   const [favorites, setFavorites] = useState<Track[]>([])
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null)
+  const [catalogRevision, setCatalogRevision] = useState(0)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -70,7 +71,7 @@ export default function App() {
     return () => {
       controller.abort()
     }
-  }, [searchQuery])
+  }, [searchQuery, catalogRevision])
 
   const toggleFavorite = (track: Track) => {
     setFavorites((prev) =>
@@ -117,7 +118,7 @@ export default function App() {
               </div>
             </>
           ) : (
-            <GeneratePanel />
+            <GeneratePanel onTrackGenerated={() => setCatalogRevision((r) => r + 1)} />
           )}
         </div>
 

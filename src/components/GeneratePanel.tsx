@@ -1,7 +1,11 @@
 import { useState, useRef } from 'react'
 import type { ChatMessage } from '../types'
 
-export default function GeneratePanel() {
+interface Props {
+  onTrackGenerated?: () => void
+}
+
+export default function GeneratePanel({ onTrackGenerated }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome',
@@ -32,23 +36,46 @@ export default function GeneratePanel() {
     setAudioFile(null)
     setIsLoading(true)
 
-    // TODO: call backend music generation API
-    // const response = await fetch('/api/generate', {
-    //   method: 'POST',
-    //   body: JSON.stringify({ prompt: userMsg.content, audioFile: ... }),
-    // })
+    try {
+      const params = new URLSearchParams()
+      if (userMsg.content) params.set('prompt', userMsg.content)
+      params.set('duration', '30')
 
-    setTimeout(() => {
+      const response = await fetch(`/api/generate?${params.toString()}`, {
+        method: 'POST',
+        body: audioFile ?? undefined,
+        headers: audioFile
+          ? { 'x-audio-mime': audioFile.type || 'audio/mpeg' }
+          : {},
+      })
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Generation failed' }))
+        throw new Error(err.error || 'Generation failed')
+      }
+
+      const track = await response.json()
       const assistantMsg: ChatMessage = {
         id: `a-${Date.now()}`,
         role: 'assistant',
-        content: `Generating music for: "${userMsg.content || 'audio reference'}"...\n\n[Backend not yet connected — your generation endpoint will return results here.]`,
+        content: `Generated: "${track.title}"`,
+        generatedTrackId: track.id,
         timestamp: Date.now(),
       }
       setMessages((prev) => [...prev, assistantMsg])
+      onTrackGenerated?.()
+    } catch (err) {
+      const assistantMsg: ChatMessage = {
+        id: `a-${Date.now()}`,
+        role: 'assistant',
+        content: `Generation failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        timestamp: Date.now(),
+      }
+      setMessages((prev) => [...prev, assistantMsg])
+    } finally {
       setIsLoading(false)
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
-    }, 1200)
+    }
   }
 
   const handleKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -109,6 +136,14 @@ export default function GeneratePanel() {
               >
                 {msg.content}
               </p>
+              {msg.generatedTrackId && (
+                <audio
+                  controls
+                  src={`/api/tracks/${msg.generatedTrackId}/stream`}
+                  className="w-full mt-2"
+                  style={{ height: '32px' }}
+                />
+              )}
             </div>
           </div>
         ))}

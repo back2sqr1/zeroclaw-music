@@ -6,9 +6,9 @@ interface Props {
 
 const featured: Track = {
   id: 'featured',
-  title: 'Best Progressive House (All - Time)',
-  artist: 'Westcoast Radio (EDM)',
-  genre: '#radio',
+  title: 'Zeroclaw Music Library',
+  artist: 'Local audio catalog',
+  genre: '#local',
   duration: '3:00',
   cover: '',
 }
@@ -25,13 +25,13 @@ export default function FeaturedSection({ onPlay }: Props) {
           className="px-3 py-1 text-[11px] font-bold text-black/60 rounded-sm"
           style={{ background: 'rgba(0,0,0,0.08)', fontFamily: 'Raleway, sans-serif' }}
         >
-          #radio
+          #local
         </span>
         <span
           className="px-3 py-1 text-[11px] font-bold text-black/60 rounded-sm"
           style={{ background: 'rgba(0,0,0,0.08)', fontFamily: 'Raleway, sans-serif' }}
         >
-          #house
+          #catalog
         </span>
       </div>
 
@@ -41,15 +41,15 @@ export default function FeaturedSection({ onPlay }: Props) {
           className="text-[22px] font-bold text-black leading-snug"
           style={{ fontFamily: 'Raleway, sans-serif' }}
         >
-          Best Progressive House
+          Zeroclaw Music
           <br />
-          <span className="font-medium text-black/60">All - Time</span>
+          <span className="font-medium text-black/60">Local Library</span>
         </p>
         <p
           className="text-[12px] text-black/40 mt-1"
           style={{ fontFamily: 'Raleway, sans-serif' }}
         >
-          Westcoast Radio (EDM)
+          Local audio catalog
         </p>
       </div>
 

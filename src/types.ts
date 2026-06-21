@@ -5,7 +5,7 @@ export interface Track {
   genre: string
   duration: string
   cover: string
-  url: string
+  url?: string
   source?: 'audio' | 'generated'
 }
 

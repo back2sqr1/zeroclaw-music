@@ -1,19 +1,4 @@
-import type { Track } from '../types'
-
-interface Props {
-  onPlay: (track: Track) => void
-}
-
-const featured: Track = {
-  id: 'featured',
-  title: 'Zeroclaw Music Library',
-  artist: 'Local audio catalog',
-  genre: '#local',
-  duration: '3:00',
-  cover: '',
-}
-
-export default function FeaturedSection({ onPlay }: Props) {
+export default function FeaturedSection() {
   return (
     <div
       className="flex-shrink-0 px-6 py-8 flex flex-col gap-4"
@@ -55,26 +40,18 @@ export default function FeaturedSection({ onPlay }: Props) {
 
       {/* Actions */}
       <div className="flex items-center gap-3">
-        <button
-          onClick={() => onPlay(featured)}
+        <div
           className="flex items-center gap-2 bg-black text-musica-yellow font-bold text-[13px] px-5 py-2 rounded-sm"
           style={{ fontFamily: 'Raleway, sans-serif' }}
         >
-          PLAY
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="#ebd564">
-            <polygon points="0,0 10,5 0,10" />
+          BROWSE
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ebd564" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 7h7l2 2h9v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
+            <path d="M3 7V5a2 2 0 0 1 2-2h4l2 2h4" />
           </svg>
-        </button>
-        <button
-          onClick={() => onPlay(featured)}
-          className="w-8 h-8 border border-black/20 rounded-sm flex items-center justify-center hover:bg-black/5 transition-colors"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="2">
-            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-          </svg>
-        </button>
+        </div>
         <span className="ml-auto text-[11px] text-black/40" style={{ fontFamily: 'Raleway, sans-serif' }}>
-          01 / 03
+          Filesystem catalog
         </span>
       </div>
     </div>

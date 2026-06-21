@@ -43,6 +43,37 @@ npm run dev:frontend
 Vite proxies `/api` to the backend, so the frontend uses relative URLs and does
 not need CORS.
 
+## Audio generation
+
+Text prompts and default audio-to-audio uploads use separate Modal endpoints:
+
+```sh
+AUDIO_API_URL=https://reverb-paste--stable-audio-3-server-stableaudio3-text-to-audio.modal.run/
+MODAL_AUDIO_TO_AUDIO_API_URL=https://reverb-paste--stable-audio-3-server-stableaudio3-audio-to-audio.modal.run/
+```
+
+The default audio-to-audio request body is:
+
+```json
+{
+  "audio_base64": "...",
+  "prompt": "bossa nova bassline",
+  "duration": 15,
+  "init_noise_level": 0.9
+}
+```
+
+Stability AI multipart audio-to-audio is still available as a backup provider
+from the Generate chat UI. Configure it with:
+
+```sh
+STABILITY_API_KEY=sk-...
+STABILITY_AUDIO_TO_AUDIO_URL=https://api.stability.ai/v2beta/audio/stable-audio/audio-to-audio
+STABILITY_AUDIO_RESULTS_URL=https://api.stability.ai/v2beta/audio/results
+STABILITY_POLL_INTERVAL_MS=10000
+STABILITY_MAX_POLL_ATTEMPTS=30
+```
+
 ## Production
 
 Build the React frontend and start the combined Node server:

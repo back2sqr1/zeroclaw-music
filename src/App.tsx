@@ -12,11 +12,14 @@ interface ApiTrack {
   id: string
   title: string
   artist: string
+  genre?: string
+  source?: Track['source']
+  url: string
 }
 
 const enrichTrack = (track: ApiTrack): Track => ({
   ...track,
-  genre: '#local',
+  genre: track.genre || '#local',
   duration: '--:--',
   cover: '',
 })
@@ -39,6 +42,8 @@ export default function App() {
     if (trimmedQuery) {
       params.set('q', trimmedQuery)
     }
+
+    setIsLoadingTracks(true)
 
     fetch(`/api/tracks${params.size ? `?${params.toString()}` : ''}`, {
       signal: controller.signal,
@@ -81,6 +86,26 @@ export default function App() {
     )
   }
 
+  const deleteTrack = async (track: Track) => {
+    const shouldDelete = window.confirm(`Delete "${track.title}" from the filesystem?`)
+
+    if (!shouldDelete) {
+      return
+    }
+
+    const response = await fetch(`/api/tracks/${track.id}`, { method: 'DELETE' })
+
+    if (!response.ok) {
+      setTrackError('Unable to delete track.')
+      return
+    }
+
+    setTracks((prev) => prev.filter((item) => item.id !== track.id))
+    setFavorites((prev) => prev.filter((item) => item.id !== track.id))
+    setCurrentTrack((current) => (current?.id === track.id ? null : current))
+    setCatalogRevision((revision) => revision + 1)
+  }
+
   return (
     <div className="flex flex-col w-screen h-screen overflow-hidden bg-white">
       {/* Header */}
@@ -101,7 +126,7 @@ export default function App() {
           {activeView === 'catalog' ? (
             <>
               {/* Featured hero */}
-              <FeaturedSection onPlay={setCurrentTrack} />
+              <FeaturedSection />
 
               {/* Scrollable catalog sections */}
               <div className="flex flex-col gap-6 p-5 flex-1">
@@ -114,6 +139,7 @@ export default function App() {
                   favorites={favorites}
                   onPlay={setCurrentTrack}
                   onToggleFavorite={toggleFavorite}
+                  onDelete={deleteTrack}
                 />
               </div>
             </>
@@ -130,6 +156,7 @@ export default function App() {
             currentTrack={currentTrack}
             onPlay={setCurrentTrack}
             onToggleFavorite={toggleFavorite}
+            onDelete={deleteTrack}
           />
         </div>
       </div>

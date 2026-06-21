@@ -5,6 +5,21 @@ interface Props {
   onTrackGenerated?: () => void
 }
 
+const getSupportedAudioMimeType = (file: File) => {
+  const name = file.name.toLowerCase()
+  const type = file.type.toLowerCase()
+
+  if (type === 'audio/mpeg' || type === 'audio/mp3' || name.endsWith('.mp3')) {
+    return 'audio/mpeg'
+  }
+
+  if (type === 'audio/wav' || type === 'audio/wave' || type === 'audio/x-wav' || name.endsWith('.wav')) {
+    return 'audio/wav'
+  }
+
+  return ''
+}
+
 export default function GeneratePanel({ onTrackGenerated }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -16,49 +31,89 @@ export default function GeneratePanel({ onTrackGenerated }: Props) {
   ])
   const [input, setInput] = useState('')
   const [audioFile, setAudioFile] = useState<File | null>(null)
+  const [audioProvider, setAudioProvider] = useState<'modal' | 'stability'>('modal')
   const [isLoading, setIsLoading] = useState(false)
+  const [loadingLabel, setLoadingLabel] = useState('Generating...')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   const send = async () => {
     if (!input.trim() && !audioFile) return
+    const selectedAudioFile = audioFile
 
     const userMsg: ChatMessage = {
       id: `u-${Date.now()}`,
       role: 'user',
       content: input.trim() || '',
-      audioFile: audioFile?.name,
+      audioFile: selectedAudioFile?.name,
       timestamp: Date.now(),
     }
 
     setMessages((prev) => [...prev, userMsg])
     setInput('')
     setAudioFile(null)
+    setLoadingLabel(selectedAudioFile ? 'Transforming audio...' : 'Generating...')
     setIsLoading(true)
 
     try {
-      const params = new URLSearchParams()
-      if (userMsg.content) params.set('prompt', userMsg.content)
-      params.set('duration', '30')
+      let response: Response
 
-      const response = await fetch(`/api/generate?${params.toString()}`, {
-        method: 'POST',
-        body: audioFile ?? undefined,
-        headers: audioFile
-          ? { 'x-audio-mime': audioFile.type || 'audio/mpeg' }
-          : {},
-      })
+      if (selectedAudioFile) {
+        const audioMimeType = getSupportedAudioMimeType(selectedAudioFile)
+
+        if (!audioMimeType) {
+          throw new Error('Audio-to-audio supports MP3 and WAV uploads. Please choose a .mp3 or .wav file.')
+        }
+
+        const params = new URLSearchParams({
+          duration: '15',
+          init_noise_level: '0.9',
+        })
+
+        if (audioProvider === 'stability') {
+          params.set('provider', 'stability')
+          params.set('outputFormat', 'mp3')
+          params.set('strength', '0.5')
+        }
+
+        if (userMsg.content) {
+          params.set('prompt', userMsg.content)
+        }
+
+        response = await fetch(`/api/generate?${params.toString()}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': audioMimeType,
+          },
+          body: selectedAudioFile,
+        })
+      } else {
+        response = await fetch('/api/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: userMsg.content, duration: 30 }),
+        })
+      }
 
       if (!response.ok) {
-        const err = await response.json().catch(() => ({ error: 'Generation failed' }))
-        throw new Error(err.error || 'Generation failed')
+        const text = await response.text()
+        let message = text || `Request failed with ${response.status}`
+
+        try {
+          const err = JSON.parse(text)
+          message = err.error || err.detail || message
+        } catch {
+          message = message.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+        }
+
+        throw new Error(message || `Request failed with ${response.status}`)
       }
 
       const track = await response.json()
       const assistantMsg: ChatMessage = {
         id: `a-${Date.now()}`,
         role: 'assistant',
-        content: `Generated: "${track.title}"`,
+        content: `${selectedAudioFile ? 'Transformed' : 'Generated'}: "${track.title}"`,
         generatedTrackId: track.id,
         timestamp: Date.now(),
       }
@@ -74,6 +129,7 @@ export default function GeneratePanel({ onTrackGenerated }: Props) {
       setMessages((prev) => [...prev, assistantMsg])
     } finally {
       setIsLoading(false)
+      setLoadingLabel('Generating...')
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
     }
   }
@@ -136,14 +192,6 @@ export default function GeneratePanel({ onTrackGenerated }: Props) {
               >
                 {msg.content}
               </p>
-              {msg.generatedTrackId && (
-                <audio
-                  controls
-                  src={`/api/tracks/${msg.generatedTrackId}/stream`}
-                  className="w-full mt-2"
-                  style={{ height: '32px' }}
-                />
-              )}
             </div>
           </div>
         ))}
@@ -164,7 +212,7 @@ export default function GeneratePanel({ onTrackGenerated }: Props) {
                 className="text-[12px] text-black/60"
                 style={{ fontFamily: 'Raleway, sans-serif' }}
               >
-                Generating...
+                {loadingLabel}
               </span>
             </div>
           </div>
@@ -179,21 +227,49 @@ export default function GeneratePanel({ onTrackGenerated }: Props) {
       >
         {/* Audio file preview */}
         {audioFile && (
-          <div className="flex items-center gap-2 mb-2 px-3 py-2 rounded-sm text-sm bg-musica-yellow/30">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="2">
-              <path d="M9 18V5l12-2v13" />
-              <circle cx="6" cy="18" r="3" />
-              <circle cx="18" cy="16" r="3" />
-            </svg>
-            <span className="flex-1 truncate text-[12px]" style={{ fontFamily: 'Raleway, sans-serif' }}>
-              {audioFile.name}
-            </span>
-            <button
-              onClick={() => setAudioFile(null)}
-              className="text-black/50 hover:text-black"
-            >
-              ×
-            </button>
+          <div className="mb-2">
+            <div className="flex items-center gap-2 px-3 py-2 rounded-sm text-sm bg-musica-yellow/30">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="2">
+                <path d="M9 18V5l12-2v13" />
+                <circle cx="6" cy="18" r="3" />
+                <circle cx="18" cy="16" r="3" />
+              </svg>
+              <span className="flex-1 truncate text-[12px]" style={{ fontFamily: 'Raleway, sans-serif' }}>
+                {audioFile.name}
+              </span>
+              <button
+                onClick={() => setAudioFile(null)}
+                className="text-black/50 hover:text-black"
+              >
+                ×
+              </button>
+            </div>
+            <div className="flex mt-2 border border-musica-yellow/60 rounded-sm overflow-hidden w-fit">
+              <button
+                type="button"
+                onClick={() => setAudioProvider('modal')}
+                className={`px-3 py-1 text-[11px] transition-colors ${
+                  audioProvider === 'modal'
+                    ? 'bg-musica-dark text-musica-yellow'
+                    : 'bg-white text-black/60 hover:bg-musica-yellow/20'
+                }`}
+                style={{ fontFamily: 'Raleway, sans-serif' }}
+              >
+                Modal
+              </button>
+              <button
+                type="button"
+                onClick={() => setAudioProvider('stability')}
+                className={`px-3 py-1 text-[11px] border-l border-musica-yellow/60 transition-colors ${
+                  audioProvider === 'stability'
+                    ? 'bg-musica-dark text-musica-yellow'
+                    : 'bg-white text-black/60 hover:bg-musica-yellow/20'
+                }`}
+                style={{ fontFamily: 'Raleway, sans-serif' }}
+              >
+                Stability
+              </button>
+            </div>
           </div>
         )}
 
@@ -213,7 +289,7 @@ export default function GeneratePanel({ onTrackGenerated }: Props) {
           <input
             ref={fileInputRef}
             type="file"
-            accept="audio/*"
+            accept=".mp3,.wav,audio/mpeg,audio/wav"
             className="hidden"
             onChange={(e) => e.target.files?.[0] && setAudioFile(e.target.files[0])}
           />
@@ -244,7 +320,7 @@ export default function GeneratePanel({ onTrackGenerated }: Props) {
           className="text-[10px] text-gray-400 mt-1.5"
           style={{ fontFamily: 'Raleway, sans-serif' }}
         >
-          Press Enter to send · Shift+Enter for new line · Audio upload supports MP3, WAV, M4A
+          Press Enter to send · Shift+Enter for new line · Prompts use text-to-audio; uploads use audio-to-audio
         </p>
       </div>
     </div>

@@ -22,9 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-audio/1. The Gaping Mouth.mp3
-audio/2. Drowning Act.mp3
-audio/3. Sleep Talking.mp3
-audio/4. Why Do You Let Me Stay Here?.mp3
+audio/
 .env
 generated/

@@ -6,9 +6,17 @@ interface Props {
   currentTrack: Track | null
   onPlay: (track: Track) => void
   onToggleFavorite: (track: Track) => void
+  onDelete: (track: Track) => void
 }
 
-export default function FavoritesSidebar({ tracks, favorites, currentTrack, onPlay, onToggleFavorite }: Props) {
+export default function FavoritesSidebar({
+  tracks,
+  favorites,
+  currentTrack,
+  onPlay,
+  onToggleFavorite,
+  onDelete,
+}: Props) {
   const displayTracks = favorites.length > 0 ? favorites : tracks.slice(0, 7)
 
   return (
@@ -35,6 +43,7 @@ export default function FavoritesSidebar({ tracks, favorites, currentTrack, onPl
                 isActive ? 'bg-musica-dark' : 'hover:bg-[#dfc950]'
               }`}
               style={{ borderColor: 'rgba(0,0,0,0.06)' }}
+              title="Select for bottom player"
               onClick={() => onPlay(track)}
             >
               {/* Index */}
@@ -75,6 +84,7 @@ export default function FavoritesSidebar({ tracks, favorites, currentTrack, onPl
               <button
                 className="flex-shrink-0"
                 onClick={(e) => { e.stopPropagation(); onToggleFavorite(track) }}
+                title={isFav ? 'Remove from favorites' : 'Add to favorites'}
               >
                 <svg
                   width="14"
@@ -85,6 +95,33 @@ export default function FavoritesSidebar({ tracks, favorites, currentTrack, onPl
                   strokeWidth="2"
                 >
                   <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                </svg>
+              </button>
+
+              {/* Delete */}
+              <button
+                className="flex-shrink-0"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onDelete(track)
+                }}
+                title="Delete audio file"
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke={isActive ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.35)'}
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M3 6h18" />
+                  <path d="M8 6V4h8v2" />
+                  <path d="M19 6l-1 14H6L5 6" />
+                  <path d="M10 11v5" />
+                  <path d="M14 11v5" />
                 </svg>
               </button>
             </div>

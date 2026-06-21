@@ -9,6 +9,7 @@ interface Props {
   favorites: Track[]
   onPlay: (track: Track) => void
   onToggleFavorite: (track: Track) => void
+  onDelete: (track: Track) => void
 }
 
 export default function WeeklyTopTrack({
@@ -20,6 +21,7 @@ export default function WeeklyTopTrack({
   favorites,
   onPlay,
   onToggleFavorite,
+  onDelete,
 }: Props) {
   return (
     <div className="flex-shrink-0">
@@ -42,6 +44,7 @@ export default function WeeklyTopTrack({
                   : 'bg-white border-gray-100 hover:border-musica-yellow'
               }`}
               style={{ width: '140px' }}
+              title="Select for bottom player"
               onClick={() => onPlay(track)}
             >
               <div className="flex items-start justify-between mb-2">
@@ -79,15 +82,25 @@ export default function WeeklyTopTrack({
                 >
                   {track.duration}
                 </span>
-                <div
-                  className={`w-6 h-6 rounded-full flex items-center justify-center ${
-                    isActive ? 'bg-musica-yellow' : 'bg-black/5'
+                <button
+                  type="button"
+                  title="Delete audio file"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onDelete(track)
+                  }}
+                  className={`w-6 h-6 rounded-full flex items-center justify-center transition-colors ${
+                    isActive ? 'bg-musica-yellow hover:bg-red-200' : 'bg-black/5 hover:bg-red-100'
                   }`}
                 >
-                  <svg width="8" height="8" viewBox="0 0 10 10" fill={isActive ? 'black' : '#999'}>
-                    <polygon points="0,0 10,5 0,10" />
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={isActive ? 'black' : '#777'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 6h18" />
+                    <path d="M8 6V4h8v2" />
+                    <path d="M19 6l-1 14H6L5 6" />
+                    <path d="M10 11v5" />
+                    <path d="M14 11v5" />
                   </svg>
-                </div>
+                </button>
               </div>
             </div>
           )

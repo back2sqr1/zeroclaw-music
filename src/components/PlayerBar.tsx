@@ -43,7 +43,7 @@ export default function PlayerBar({ currentTrack }: Props) {
           <audio
             key={currentTrack.id}
             controls
-            src={`/api/tracks/${currentTrack.id}/stream`}
+            src={currentTrack.url}
             className="w-full h-8"
           />
         ) : (

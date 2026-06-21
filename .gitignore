@@ -1,0 +1,28 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+audio/1. The Gaping Mouth.mp3
+audio/2. Drowning Act.mp3
+audio/3. Sleep Talking.mp3
+audio/4. Why Do You Let Me Stay Here?.mp3

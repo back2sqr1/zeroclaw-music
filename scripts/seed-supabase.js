@@ -6,14 +6,20 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createClient } from '@supabase/supabase-js'
+import { loadEnvFile } from '../lib/env.js'
 import { AUDIO_MIME_TYPES, fileTrackId, titleFromFilename } from '../lib/audio-utils.js'
 import { embedPrompt, embedAudio } from '../lib/embeddings.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const audioDir = path.resolve(__dirname, '..', 'audio')
 
+loadEnvFile()
+
 const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\/$/, '')
-const supabase = createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+const supabase = createClient(
+  SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY,
+)
 
 // Sanitize filename for use as a Supabase Storage path — keeps letters, digits,
 // dots, dashes, underscores, and spaces; replaces everything else (?, ', etc.)
@@ -37,8 +43,8 @@ async function checkConnection() {
   const storageUrl = `${SUPABASE_URL}/storage/v1/bucket`
   const res = await fetch(storageUrl, {
     headers: {
-      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-      apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY}`,
+      apikey: process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY,
     },
   }).catch((e) => { throw new Error(`Could not reach Supabase at ${SUPABASE_URL}: ${e.message}`) })
 
@@ -142,8 +148,8 @@ async function seedFile(filename) {
 }
 
 async function main() {
-  if (!SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    console.error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY env vars')
+  if (!SUPABASE_URL || !(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY)) {
+    console.error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY / SUPABASE_SECRET_KEY env vars')
     process.exit(1)
   }
   if (!process.env.OPENAI_API_KEY) {

@@ -6,13 +6,7 @@ export interface Track {
   duration: string
   cover: string
   url?: string
-  source?: 'audio' | 'generated'
-}
-
-export interface Artist {
-  id: string
-  name: string
-  image: string
+  source?: 'audio' | 'generated' | 'local'
 }
 
 export interface ChatMessage {
@@ -21,6 +15,8 @@ export interface ChatMessage {
   content: string
   audioFile?: string
   generatedTrackId?: string
+  generatedTrackUrl?: string
+  coverUrl?: string
   timestamp: number
 }
 

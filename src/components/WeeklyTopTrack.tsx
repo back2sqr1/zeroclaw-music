@@ -1,4 +1,5 @@
 import type { Track } from '../types'
+import PromoImageButton from './PromoImageButton'
 
 interface Props {
   tracks: Track[]
@@ -10,6 +11,7 @@ interface Props {
   onPlay: (track: Track) => void
   onToggleFavorite: (track: Track) => void
   onDelete: (track: Track) => void
+  onCoverGenerated?: () => void
 }
 
 export default function WeeklyTopTrack({
@@ -22,6 +24,7 @@ export default function WeeklyTopTrack({
   onPlay,
   onToggleFavorite,
   onDelete,
+  onCoverGenerated,
 }: Props) {
   return (
     <div className="flex-shrink-0">
@@ -41,6 +44,17 @@ export default function WeeklyTopTrack({
               title="Select for bottom player"
               onClick={() => onPlay(track)}
             >
+              {track.cover ? (
+                <img
+                  src={track.cover}
+                  alt=""
+                  className="w-full h-16 object-cover rounded-sm mb-2"
+                />
+              ) : (
+                <div className="w-full h-16 rounded-sm mb-2 bg-black/5 flex items-center justify-center text-[10px] text-black/30">
+                  no art
+                </div>
+              )}
               <div className="flex items-start justify-between mb-2">
                 <span
                   className={`text-[10px] font-bold ${isActive ? 'text-musica-yellow/60' : 'text-black/30'}`}
@@ -69,13 +83,13 @@ export default function WeeklyTopTrack({
               >
                 {track.artist}
               </p>
-              <div className="flex items-center justify-between mt-3">
-                <span
-                  className={`text-[9px] ${isActive ? 'text-white/30' : 'text-black/20'}`}
-                  style={{ fontFamily: 'Raleway, sans-serif' }}
-                >
-                  {track.duration}
-                </span>
+              <div className="flex items-center justify-between mt-3 gap-1">
+                <PromoImageButton
+                  trackId={track.id}
+                  hasCover={!!track.cover}
+                  onCoverGenerated={onCoverGenerated}
+                  compact
+                />
                 <button
                   type="button"
                   title="Delete audio file"
@@ -83,7 +97,7 @@ export default function WeeklyTopTrack({
                     e.stopPropagation()
                     onDelete(track)
                   }}
-                  className={`w-6 h-6 rounded-full flex items-center justify-center transition-colors ${
+                  className={`w-6 h-6 rounded-full flex items-center justify-center transition-colors flex-shrink-0 ${
                     isActive ? 'bg-musica-yellow hover:bg-red-200' : 'bg-black/5 hover:bg-red-100'
                   }`}
                 >
@@ -111,7 +125,9 @@ export default function WeeklyTopTrack({
         )}
         {tracks.length === 0 && !isLoading && !error && (
           <p className="text-[12px] text-gray-300 py-4" style={{ fontFamily: 'Raleway, sans-serif' }}>
-            No tracks match "{searchQuery}"
+            {searchQuery.trim()
+              ? `No tracks match "${searchQuery}"`
+              : 'No tracks yet. Upload audio or use the Generate tab.'}
           </p>
         )}
       </div>

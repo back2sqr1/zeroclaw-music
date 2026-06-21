@@ -6,13 +6,13 @@
   "scripts": {
     "dev": "vite",
     "dev:frontend": "vite",
-    "dev:backend": "node --env-file=.env server.js",
-    "dev:full": "sh -c 'trap \"kill $(jobs -p)\" EXIT; npm run dev:backend & npm run dev:frontend'",
+    "dev:backend": "node server.js",
+    "dev:full": "node scripts/dev.mjs",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "start": "node --env-file=.env server.js",
-    "seed": "node --env-file=.env scripts/seed-supabase.js"
+    "start": "node server.js",
+    "seed": "node scripts/seed-supabase.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",

@@ -16,13 +16,14 @@ interface ApiTrack {
   genre?: string
   source?: Track['source']
   url: string
+  coverUrl?: string | null
 }
 
 const enrichTrack = (track: ApiTrack): Track => ({
   ...track,
-  genre: track.genre || '#local',
+  genre: track.genre || (track.source === 'generated' ? '#generated' : '#local'),
   duration: '--:--',
-  cover: '',
+  cover: track.coverUrl || '',
 })
 
 export default function App() {
@@ -46,33 +47,41 @@ export default function App() {
 
     setIsLoadingTracks(true)
 
-    fetch(`/api/tracks${params.size ? `?${params.toString()}` : ''}`, {
-      signal: controller.signal,
-    })
-      .then((response) => {
+    const loadTracks = async (attempt = 0) => {
+      try {
+        const response = await fetch(
+          `/api/tracks${params.size ? `?${params.toString()}` : ''}`,
+          { signal: controller.signal },
+        )
+
         if (!response.ok) {
           throw new Error(`Track request failed with ${response.status}`)
         }
 
-        return response.json() as Promise<ApiTrack[]>
-      })
-      .then((apiTracks) => {
+        const apiTracks = (await response.json()) as ApiTrack[]
         setTracks(apiTracks.map(enrichTrack))
         setTrackError('')
-      })
-      .catch((error: unknown) => {
+        setIsLoadingTracks(false)
+      } catch (error: unknown) {
         if (error instanceof DOMException && error.name === 'AbortError') {
+          return
+        }
+
+        if (attempt < 4) {
+          await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)))
+          if (!controller.signal.aborted) {
+            await loadTracks(attempt + 1)
+          }
           return
         }
 
         setTracks([])
         setTrackError('Unable to load tracks.')
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) {
-          setIsLoadingTracks(false)
-        }
-      })
+        setIsLoadingTracks(false)
+      }
+    }
+
+    void loadTracks()
 
     return () => {
       controller.abort()
@@ -150,11 +159,15 @@ export default function App() {
                   onPlay={setCurrentTrack}
                   onToggleFavorite={toggleFavorite}
                   onDelete={deleteTrack}
+                  onCoverGenerated={() => setCatalogRevision((r) => r + 1)}
                 />
               </div>
             </>
           ) : (
-            <GeneratePanel onTrackGenerated={() => setCatalogRevision((r) => r + 1)} />
+            <GeneratePanel
+              onTrackGenerated={() => setCatalogRevision((r) => r + 1)}
+              onCoverGenerated={() => setCatalogRevision((r) => r + 1)}
+            />
           )}
         </div>
 

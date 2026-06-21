@@ -1,8 +1,10 @@
 import { useState, useRef } from 'react'
 import type { ChatMessage } from '../types'
+import PromoImageButton from './PromoImageButton'
 
 interface Props {
   onTrackGenerated?: () => void
+  onCoverGenerated?: () => void
 }
 
 const getSupportedAudioMimeType = (file: File) => {
@@ -20,7 +22,7 @@ const getSupportedAudioMimeType = (file: File) => {
   return ''
 }
 
-export default function GeneratePanel({ onTrackGenerated }: Props) {
+export default function GeneratePanel({ onTrackGenerated, onCoverGenerated }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome',
@@ -115,6 +117,7 @@ export default function GeneratePanel({ onTrackGenerated }: Props) {
         role: 'assistant',
         content: `${selectedAudioFile ? 'Transformed' : 'Generated'}: "${track.title}"`,
         generatedTrackId: track.id,
+        generatedTrackUrl: track.url,
         timestamp: Date.now(),
       }
       setMessages((prev) => [...prev, assistantMsg])
@@ -192,6 +195,27 @@ export default function GeneratePanel({ onTrackGenerated }: Props) {
               >
                 {msg.content}
               </p>
+              {msg.generatedTrackId && (
+                <div className="mt-3 space-y-2">
+                  <audio
+                    controls
+                    src={msg.generatedTrackUrl}
+                    className="w-full h-8"
+                  />
+                  <PromoImageButton
+                    trackId={msg.generatedTrackId}
+                    hasCover={!!msg.coverUrl}
+                    onCoverGenerated={(coverUrl) => {
+                      setMessages((prev) =>
+                        prev.map((item) =>
+                          item.id === msg.id ? { ...item, coverUrl } : item,
+                        ),
+                      )
+                      onCoverGenerated?.()
+                    }}
+                  />
+                </div>
+              )}
             </div>
           </div>
         ))}

@@ -7,10 +7,24 @@ import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { createClient } from '@supabase/supabase-js'
 import { embedPrompt, embedAudio } from './lib/embeddings.js'
+import { getEnv, loadEnvFile } from './lib/env.js'
+import {
+  coverFilePath,
+  coverUrlForTrack,
+  getCoverForTrack,
+  setCoverForTrack,
+} from './lib/covers.js'
+import {
+  buildDjPromoPrompt,
+  coverExtension,
+  generatePromoImage,
+} from './services/openaiImage.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const execFileAsync = promisify(execFile)
+
+loadEnvFile()
 
 const app = express()
 const port = process.env.PORT || 3000
@@ -19,7 +33,7 @@ const indexHtml = path.join(distDir, 'index.html')
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY,
 )
 
 function publicUrl(bucket, filename) {
@@ -27,6 +41,8 @@ function publicUrl(bucket, filename) {
 }
 
 function toPublicTrack(row) {
+  const coverMeta = getCoverForTrack(row.id)
+
   return {
     id: row.id,
     title: row.title,
@@ -34,6 +50,7 @@ function toPublicTrack(row) {
     source: row.source,
     genre: row.source === 'generated' ? '#generated' : '#local',
     url: publicUrl(row.bucket, row.filename),
+    coverUrl: coverUrlForTrack(row.id, coverMeta),
   }
 }
 
@@ -175,12 +192,12 @@ const STABLE_AUDIO_BASE_URL = (process.env.STABLE_AUDIO_BASE_URL || '').replace(
 const MODAL_TEXT_TO_AUDIO_URL = STABLE_AUDIO_BASE_URL
   ? `${STABLE_AUDIO_BASE_URL}/text-to-audio`
   : process.env.AUDIO_API_URL ||
-    'https://reverb-paste--stable-audio-3-server-stableaudio3-text-to-audio.modal.run/'
+    'https://reverb-paste--stable-audio-3-server-stableaudio3-web.modal.run/text-to-audio'
 
 const MODAL_AUDIO_TO_AUDIO_URL = STABLE_AUDIO_BASE_URL
   ? `${STABLE_AUDIO_BASE_URL}/audio-to-audio`
   : process.env.MODAL_AUDIO_TO_AUDIO_API_URL ||
-    'https://reverb-paste--stable-audio-3-server-stableaudio3-audio-to-audio.modal.run/'
+    'https://reverb-paste--stable-audio-3-server-stableaudio3-web.modal.run/audio-to-audio'
 
 const AUDIO_TO_AUDIO_STRENGTH =
   Number(process.env.AUDIO_TO_AUDIO_STRENGTH ?? process.env.AUDIO_TO_AUDIO_INIT_NOISE_LEVEL) || 0.9
@@ -342,17 +359,19 @@ async function requestStabilityAudioToAudio({ prompt, duration, strength, output
 }
 
 async function requestModalTextToAudio({ prompt, duration, outputFormat, seed, steps, cfgScale }) {
-  const fd = new FormData()
-  fd.append('prompt', prompt)
-  fd.append('duration', String(duration))
-  fd.append('output_format', outputFormat)
-  if (seed != null) fd.append('seed', String(seed))
-  if (steps != null) fd.append('steps', String(steps))
-  if (cfgScale != null) fd.append('cfg_scale', String(cfgScale))
+  const body = new URLSearchParams({
+    prompt,
+    duration: String(duration),
+    output_format: outputFormat,
+  })
+  if (seed != null) body.set('seed', String(seed))
+  if (steps != null) body.set('steps', String(steps))
+  if (cfgScale != null) body.set('cfg_scale', String(cfgScale))
 
   const res = await fetch(MODAL_TEXT_TO_AUDIO_URL, {
     method: 'POST',
-    body: fd,
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
     signal: AbortSignal.timeout(600_000),
   })
 
@@ -558,6 +577,62 @@ app.post('/api/generate', parseGenerateRequest, async (req, res) => {
     console.error(error)
     res.status(502).json({ error: error instanceof Error ? error.message : 'Failed to generate audio' })
   }
+})
+
+app.post('/api/tracks/:id/promo-image', express.json({ limit: '1mb' }), async (req, res) => {
+  const { data: track, error } = await supabase
+    .from('tracks')
+    .select('id, title')
+    .eq('id', req.params.id)
+    .single()
+
+  if (error || !track) {
+    res.status(404).json({ error: 'Track not found' })
+    return
+  }
+
+  const customPrompt = String(req.body?.prompt || '').trim()
+  const prompt = buildDjPromoPrompt(track.title, customPrompt)
+
+  try {
+    const { buffer, mimeType } = await generatePromoImage({
+      prompt,
+      apiKey: getEnv('OPENAI_API_KEY'),
+    })
+
+    const ext = coverExtension(mimeType)
+    const coverFilename = `${track.id}${ext}`
+    fs.writeFileSync(coverFilePath(coverFilename), buffer)
+    const coverMeta = setCoverForTrack(track.id, coverFilename)
+
+    res.status(201).json({
+      trackId: track.id,
+      coverUrl: coverUrlForTrack(track.id, coverMeta),
+      title: track.title,
+    })
+  } catch (promoError) {
+    console.error('Promo image error:', promoError)
+    res.status(500).json({
+      error: promoError instanceof Error ? promoError.message : 'Failed to generate promo image',
+    })
+  }
+})
+
+app.get('/api/tracks/:id/cover', (req, res) => {
+  const coverMeta = getCoverForTrack(req.params.id)
+
+  if (!coverMeta?.coverFilename) {
+    res.status(404).json({ error: 'Cover not found' })
+    return
+  }
+
+  const filePath = coverFilePath(coverMeta.coverFilename)
+  if (!filePath.startsWith(`${path.resolve(__dirname, 'generated', 'covers')}${path.sep}`)) {
+    res.status(400).json({ error: 'Invalid cover path' })
+    return
+  }
+
+  res.sendFile(filePath)
 })
 
 // --- Error handler + SPA ---
